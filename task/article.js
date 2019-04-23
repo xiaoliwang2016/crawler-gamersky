@@ -2,7 +2,9 @@ const request = require('request')
 const cheerio = require('cheerio')
 const ImageTask = require('./image.js')
 const Entities = require('html-entities').XmlEntities
+
 var Article = {}
+var ArticleModel = global.sequelize.import('../models/article.js')
 
 Article.parse = async function(context){
 	var $ = cheerio.load(context)
@@ -21,8 +23,8 @@ Article.parse = async function(context){
 	info.source = detail.slice(detail.indexOf('来源') + 3, detail.indexOf('作者'))
 	info.author = detail.slice(detail.indexOf('作者') + 3, detail.indexOf('编辑'))
 	info.editor = detail.slice(detail.indexOf('编辑') + 3, detail.indexOf('浏览'))
-	info.views =  $("#countn").text()
-	info.follow =  $(".supportMe span").html()
+	// info.views =  $("#countn").text() >= 0 ? $("#countn").text() : 0
+	// info.follow =  $(".supportMe span").text() >= 0 ? $(".supportMe span").text() : 0
 
 	//下载内容中的图片
 	var imageArr = []
@@ -36,14 +38,25 @@ Article.parse = async function(context){
 	urls.forEach((url ,index) => {
 		info.content = info.content.replace($(imgs[index]).attr("src"), url)
 	})
-
-	return info
+	return ArticleModel.create(info)
 }
 
 Article.run = function(url){
 	return new Promise((resolve, reject) => {
-		request.get(url, (err, response, body) => {
-			resolve(this.parse(body))
+		request.get({
+			url,
+			headers: {
+				"Host": "www.gamersky.com",
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36",
+				"Referer": "https://www.gamersky.com/pcgame/",
+				"Cache-Control": "max-age=0",
+				"Connection": "keep-alive"
+			}
+		}, (err, response, body) => {
+			this.parse(body).then(result => {
+				resolve(result)
+			})
+			
 		})
 	})
 

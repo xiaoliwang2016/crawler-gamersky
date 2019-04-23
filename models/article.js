@@ -4,7 +4,9 @@ module.exports = function(sequelize, DataTypes) {
 	return sequelize.define('article', {
 		id: {
 			type: DataTypes.INTEGER(11),
-			allowNull: false
+			allowNull: false,
+			primaryKey: true,
+			autoIncrement: true
 		},
 		title: {
 			type: DataTypes.STRING(200),
