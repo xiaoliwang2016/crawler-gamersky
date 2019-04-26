@@ -12,24 +12,35 @@ News.url = "https://db2.gamersky.com/LabelJsonpAjax.aspx"
 
 News.parse = async function(content){
 	var $ = cheerio.load(content)
-
+	var taskArr = []
 	for(let i = 1; i < $("li").length; i++){
 		let info = {
+			article_id: '',
 			title: '',
 			descrption: '',
 			img: ''
 		}
-		info.title = entities.decode($(`li:nth-child(${i})`).find($(".con .tit a")).text())
-		info.descrption = entities.decode($(`li:nth-child(${i})`).find($(".con .txt")).text())
-		let url = entities.decode($(`li:nth-child(${i})`).find($(".img a img")).attr('src'))
-		info.img =  await ImageTask.saveImage(url)
+		let bannerUrl = entities.decode($(`li:nth-child(${i})`).find($(".img a img")).attr('src'))
+		let title = entities.decode($(`li:nth-child(${i})`).find($(".con .tit a")).attr('title'))
 		let articleUrl = entities.decode($(`li:nth-child(${i})`).find($(".con .tit a")).attr('href'))
-		let res = await NewsModel.create(info)
+		if(!articleUrl || !title || !bannerUrl){
+			console.log('跳过', articleUrl, title, bannerUrl);
+			continue
+		}
+		let res = await ArticleTask.run(articleUrl)
 		if(res){
-			await ArticleTask.run(articleUrl)
+			console.log(`${title}.........完成!`)
+			info.article_id = res.id
+			//必须等待图片保存结束
+			info.img =  await ImageTask.saveImage(bannerUrl)
+			info.title = title
+			info.descrption = entities.decode($(`li:nth-child(${i})`).find($(".con .txt")).text())
+			taskArr.push(NewsModel.create(info))
+		} else {
+			console.log(`${title}.........失败!`)
 		}
 	}
-
+	return taskArr
 }
 
 News.run = function(page){
@@ -45,10 +56,20 @@ News.run = function(page){
 			url: this.url,
 			qs: {
 				jsondata: JSON.stringify(param)
-			}
+			},
+			headers: {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36",
+				"Referer": "https://www.gamersky.com/pcgame/"
+			},
+			timeout: 5000
 		}, (err, response, body) => {
-			this.parse(JSON.parse(body.toString().slice(1,-2)).body);
-			resolve()
+			if(err) {
+				reject(err)
+				return
+			}
+			this.parse(JSON.parse(body.toString().slice(1,-2)).body).then(news => {
+				resolve()
+			})
 		})		
 	})
 
