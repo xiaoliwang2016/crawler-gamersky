@@ -2,20 +2,15 @@ const request = require('request')
 const cheerio = require('cheerio')
 const ImageTask = require('./image.js')
 const Entities = require('html-entities').XmlEntities
+const async = require('async');
+
 
 var Article = {}
 var ArticleModel = global.sequelize.import('../models/article.js')
 
-function sleep(ms){
-    return new Promise((resolve,reject) => {
-        setTimeout(() => {
-            resolve()
-        },ms)
-    })
-}
 
 Article.data = {}
-Article.parse = async function(context, info = {}){
+Article.parse = function(context, info = {}){
 	var $ = cheerio.load(context)
 
 	if(JSON.stringify(info) == '{}'){
@@ -28,28 +23,49 @@ Article.parse = async function(context, info = {}){
 	}
 
 	var content = Entities.decode($(".Mid2L_con").html())
-	//下载内容中的图片
+	//获取全部图片路径
 	var imageArr = []
-	var imgs = $(".Mid2L_con img")
-	imgs.each(async function(index,img){
-		imageArr.push(ImageTask.saveImage($(img).attr("src")))
-		await sleep(300)
+	$(".Mid2L_con img").each((index, item) => {
+		let src = $(item).attr("data-src") ? $(item).attr("data-src") : $(item).attr("src")
+		imageArr.push(src)
 	})
-
-	//等待所有图片下载完成，然后替换
-	var urls = await Promise.all(imageArr)
-	urls.forEach((url ,index) => {
-		content = content.replace($(imgs[index]).attr("src"), url)
+	
+	return new Promise((resolve, reject) => {
+		async.eachLimit(imageArr, 2, (img, callback) => {
+			ImageTask.saveImage(img).then(newImg => {
+				console.log(newImg);
+				content = content.replace(img, newImg)
+				setTimeout(() => {
+					callback(null)
+				},1000)
+			}).catch(err => {
+				setTimeout(() => {
+					callback(null)
+				},1000)
+				console.log(err)
+			})
+		}, err => {
+			info.content += content
+			this.data = info
+			resolve()
+		})
 	})
-	info.content += content
-
-	this.data = info
 }
 
-Article.load = function(url, page = 1){
+Article.load = function(url){
 	return new Promise((resolve, reject) => {
-		request.get({
-				url,
+		var urls = []
+		for(let i = 1; i <= 10; i++){
+			if(i == 1){
+				urls.push(url)
+			} else {
+				urls.push(`${url.slice(0,url.lastIndexOf('.'))}_${i}${url.slice(url.lastIndexOf('.'))}`)
+			}
+		}
+		async.eachSeries(urls, (item, callback) => {
+			console.log(`${item} 爬取中...`)
+			request.get({
+				url: item,
 				headers: {
 					"Host": "www.gamersky.com",
 					"User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36",
@@ -59,43 +75,27 @@ Article.load = function(url, page = 1){
 				},
 				timeout: 5000
 			}, (err, response, body) => {
-				if(err){
-					reject(`文章${url}爬取失败`)
-					return
-				}
-				if(response.statusCode == 404 && page == 1){
-					reject(`文章${url}页面不存在`)
-					return
-				}
-				if(response.statusCode == 404 && page > 1){
-					resolve(true)
-					return
-				}
-				if(page > 1) console.log(`加载${this.data.title}第${page}页`);
-
-				this.parse(body, this.data)
-				if(page == 1){
-					this.load(`${url.slice(0,url.lastIndexOf('.'))}_2${url.slice(url.lastIndexOf('.'))}`, 2).then(res => {
-						if(res === true){
-							resolve(true)
-						}
-					})
+				console.log(response.statusCode);
+				
+				if(response.statusCode == 404){
+					callback('finish')
 				} else {
-					page += 1
-					this.load(`${url.slice(0,url.lastIndexOf('.')-2)}_${page}${url.slice(url.lastIndexOf('.'))}`, page).then(res => {
-						if(res === true){
-							resolve(true)
-						}
+					this.parse(body, this.data).then(() => {
+						setTimeout(()=>{
+							callback(null)
+						},3000)
 					})
 				}
-			})		
+			})
+		}, err => {
+			resolve()
+		})
 	})
 }
 
-
 Article.run = function(url){
 	return new Promise((resolve, reject) => {
-		this.load(url).then(res => {
+		this.load(url).then(() => {
 			ArticleModel.create(this.data).then(article => {
 				resolve(article)
 			})

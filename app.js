@@ -47,28 +47,34 @@ global.sequelize
     });
 
 
-var NewsTask = require("./task/news.js");
-if (program.type == 'news') {
-   loadNews(program.start, program.total)
-}
+// var NewsTask = require("./task/news.js");
+// if (program.type == 'news') {
+//    loadNews(program.start, program.total)
+// }
 
 
-function loadNews(page, total){
-    if(total <= 0){
-        console.log('任务完成');
-        process.exit()
-        return
-    }
-    NewsTask.run(page).then(() => {
-        console.log(`第${page}页列表爬取完成！`)
-        page += 1
-        total -= 1
-        loadNews(page,total)
-    }).catch(err => {
-        console.log(`第${page}页列表爬取错误！`, err)
-        page += 1
-        total -= 1
-        loadNews(page,total)
-    })
-} 
+// function loadNews(page, total){
+//     if(total <= 0){
+//         console.log('任务完成');
+//         process.exit()
+//         return
+//     }
+//     NewsTask.run(page).then(() => {
+//         console.log(`第${page}页列表爬取完成！`)
+//         page += 1
+//         total -= 1
+//         loadNews(page,total)
+//     }).catch(err => {
+//         console.log(`第${page}页列表爬取错误！`, err)
+//         page += 1
+//         total -= 1
+//         loadNews(page,total)
+//     })
+// } 
 
+
+var task = require("./task/article")
+task.run('https://www.gamersky.com/handbook/201904/1178067.shtml').then(res => {
+    console.log(res.id);
+    
+})
